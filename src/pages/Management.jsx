@@ -195,7 +195,7 @@ export default function Management() {
     return (
         <div className="min-h-screen bg-white pb-32 font-sans text-slate-900 select-none">
             {/* Header */}
-            <header className="fixed top-0 left-0 right-0 z-50 bg-white/90 backdrop-blur-lg border-b border-slate-100 px-4 py-4">
+            <header className="fixed top-0 left-0 right-0 z-50 bg-white border-b border-slate-100 px-4 py-4">
                 <div className="max-w-5xl mx-auto space-y-4">
                     <div className="relative">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />

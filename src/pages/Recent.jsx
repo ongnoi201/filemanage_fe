@@ -100,7 +100,7 @@ export default function Recent() {
         <div className="min-h-screen bg-white mt-23 pb-35 font-sans select-none">
 
             {/* HEADER */}
-            <header className="fixed top-0 left-0 right-0 z-50 bg-white/80 backdrop-blur-xl border-b border-slate-100 px-6 py-4 shadow-sm">
+            <header className="fixed top-0 left-0 right-0 z-50 bg-white border-b border-slate-100 px-6 py-4 shadow-sm">
                 <div className="max-w-5xl mx-auto flex justify-between items-center">
                     <div className="flex items-center gap-3">
                         <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center text-blue-600">
