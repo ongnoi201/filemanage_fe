@@ -27,6 +27,7 @@ export default function Recent() {
         try {
             setLoading(true);
             const response = await fileService.getRecentFiles();
+            // Đảm bảo dữ liệu là mảng
             setFiles(Array.isArray(response) ? response : []);
         } catch (error) {
             console.error("Lỗi khi tải dữ liệu:", error);
@@ -41,10 +42,9 @@ export default function Recent() {
     }, []);
 
     // --- COMPUTED VALUES ---
-    // Lọc danh sách chỉ chứa ảnh để dùng cho ImageViewer
+    // Lọc danh sách chỉ chứa ẢNH để hiển thị trong ImageViewer
     const imageFiles = useMemo(() => {
-        // Sử dụng (files || []) để đảm bảo luôn có mảng để filter
-        return (files || []).filter(f => f.type === 'file');
+        return (files || []).filter(f => f.mimeType?.startsWith('image/'));
     }, [files]);
 
     const isSelectionMode = selectedIds.length > 0;
@@ -53,18 +53,21 @@ export default function Recent() {
 
     // Mở viewer hoặc chọn file
     const handleItemClick = useCallback((item) => {
+        // Lưu ý: Sử dụng item._id theo cấu trúc dữ liệu của bạn
         if (selectedIds.length > 0) {
             // Chế độ đang chọn nhiều
             setSelectedIds(prev =>
                 prev.includes(item._id) ? prev.filter(i => i !== item._id) : [...prev, item._id]
             );
         } else {
-            // Chế độ bình thường
-            if (item.type === 'file' && imageFiles.some(img => img.id === item._id)) {
-                const index = imageFiles.findIndex(img => img.id === item._id);
-                setViewerConfig({ isOpen: true, index });
+            // Chế độ bình thường: Nếu là ảnh thì mở Viewer
+            if (item.mimeType?.startsWith('image/')) {
+                const index = imageFiles.findIndex(img => img._id === item._id);
+                if (index !== -1) {
+                    setViewerConfig({ isOpen: true, index });
+                }
             } else {
-                console.log("Mở file/folder:", item.name);
+                console.log("Mở file/folder khác:", item.name);
             }
         }
     }, [selectedIds, imageFiles]);
@@ -85,8 +88,8 @@ export default function Recent() {
     const executeDelete = async () => {
         try {
             await fileService.deleteItems(confirmDelete.ids);
-            // Cập nhật UI ngay lập tức
-            setFiles(prev => prev.filter(f => !confirmDelete.ids.includes(f.id)));
+            // Cập nhật UI: Lọc bỏ các phần tử có _id nằm trong danh sách xóa
+            setFiles(prev => prev.filter(f => !confirmDelete.ids.includes(f._id)));
             setSelectedIds([]);
             setViewerConfig({ isOpen: false, index: 0 });
         } catch (error) {
@@ -109,7 +112,7 @@ export default function Recent() {
                         <div>
                             <h1 className="text-xl font-black text-slate-900 tracking-tight">Gần đây</h1>
                             <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">
-                                {loading ? 'Đang cập nhật...' : `${files?.length} hoạt động`}
+                                {loading ? 'Đang cập nhật...' : `${files?.length || 0} hoạt động`}
                             </p>
                         </div>
                     </div>
@@ -145,13 +148,13 @@ export default function Recent() {
                     }>
                         {files.map((file, index) => (
                             <FileItem
-                                key={file.id || index}
+                                key={file._id || index}
                                 item={file}
                                 viewMode={viewMode}
                                 isSelectionMode={isSelectionMode}
-                                isSelected={selectedIds.includes(file.id)}
-                                onClick={handleItemClick}
-                                onLongPress={handleLongPress}
+                                isSelected={selectedIds.includes(file._id)}
+                                onClick={() => handleItemClick(file)}
+                                onLongPress={() => handleLongPress(file._id)}
                             />
                         ))}
                     </div>
