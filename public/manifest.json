@@ -1,6 +1,6 @@
 {
-    "short_name": "ImageGallery",
-    "name": "React Image Viewer Pro",
+    "short_name": "Gallery",
+    "name": "Image Viewer",
     "icons": [
         {
             "src": "picture64.png",
