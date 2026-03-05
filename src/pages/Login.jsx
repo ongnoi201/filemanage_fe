@@ -40,7 +40,7 @@ const Login = () => {
     const handleLoginSuccess = (response) => {
         localStorage.setItem('token', response.token);
         localStorage.setItem('user', JSON.stringify(response));
-        toast.success(`Chào mừng ${response.username} đã quay trở lại!`);
+        toast.success(`Chào mừng ${response.fname} đã quay trở lại!`);
         setTimeout(() => navigate('/'), 1000);
     };
 
