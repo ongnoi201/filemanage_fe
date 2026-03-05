@@ -176,6 +176,7 @@ export default function Settings() {
     };
 
     const handleCropComplete = async (pixels) => {
+        console.log('pixels', pixels);
         try {
             const { blob, url } = await getCroppedImg(cropModal.image, pixels);
             setPreviews(prev => ({ ...prev, [cropModal.type]: url }));

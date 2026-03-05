@@ -26,7 +26,7 @@ export default function Management() {
     // State cho Modal
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
     const [isMoveModalOpen, setIsMoveModalOpen] = useState(false);
-    const [isCreating, setIsCreating] = useState(false);
+    const [creatingInFolder, setCreatingInFolder] = useState(undefined);
     const [editingId, setEditingId] = useState(null);
     const [viewerData, setViewerData] = useState({ isOpen: false, index: 0 });
 
@@ -96,13 +96,13 @@ export default function Management() {
 
     // --- ACTIONS ---
     const handleConfirmCreate = async (name) => {
-        if (!name.trim()) return setIsCreating(false);
+        if (!name.trim()) return setCreatingInFolder(undefined);
         try {
             const newFolder = await folderService.createFolder(name, currentFolderId);
             setItems(prev => [{ ...newFolder, type: 'folder' }, ...prev]);
             toast.success("Đã tạo thư mục");
         } catch (error) { toast.error("Lỗi tạo thư mục"); }
-        finally { setIsCreating(false); }
+        finally { setCreatingInFolder(undefined); }
     };
 
     const handleFileUpload = async (e) => {
@@ -173,6 +173,8 @@ export default function Management() {
             }
 
             setCurrentFolderId(item._id);
+            setCreatingInFolder(undefined);
+            setIsAddMenuOpen(false);
             setPath(prev => [...prev, { _id: item._id, name: item.name }]);
             setSelectedIds([]);
         } else {
@@ -247,40 +249,50 @@ export default function Management() {
             </header>
 
             {/* Main Content */}
+            {/* Main Content */}
             <main className="max-w-5xl mx-auto px-4 mt-36">
                 {loading ? (
                     <div className="flex flex-col items-center justify-center py-32 text-slate-300">
                         <Loader2 className="animate-spin mb-4" size={32} />
                         <p className="text-sm font-medium">Đang tải dữ liệu...</p>
                     </div>
-                ) : sortedItems.length > 0 ? (
-                    <div className={viewMode === 'grid' ? 'grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-4' : 'flex flex-col gap-2'}>
-                        {isCreating && (
-                            <FileItem
-                                item={{ name: 'Thư mục mới', type: 'folder' }}
-                                viewMode={viewMode}
-                                isEditing={true}
-                                onConfirmEdit={handleConfirmCreate}
-                                onCancelEdit={() => setIsCreating(false)}
-                            />
-                        )}
-                        {sortedItems.map((item) => (
-                            <FileItem
-                                key={item._id}
-                                item={item}
-                                viewMode={viewMode}
-                                isSelected={selectedIds.includes(item._id)}
-                                isSelectionMode={isSelectionMode}
-                                isEditing={editingId === item._id}
-                                onConfirmEdit={(n) => handleConfirmEdit(item._id, n)}
-                                onCancelEdit={() => setEditingId(null)}
-                                onClick={() => handleItemClick(item)}
-                                onLongPress={() => setSelectedIds(p => [...p, item._id])}
-                            />
-                        ))}
-                    </div>
                 ) : (
-                    <div className="text-center py-20 text-slate-400">Không tìm thấy mục nào</div>
+                    <>
+                        {/* Hiển thị danh sách nếu có items HOẶC đang trong chế độ tạo mới */}
+                        {(sortedItems.length > 0 || creatingInFolder === currentFolderId) ? (
+                            <div className={viewMode === 'grid' ? 'grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-4' : 'flex flex-col gap-2'}>
+                                {/* Luôn ưu tiên hiển thị ô tạo mới ở đầu danh sách */}
+                                {creatingInFolder === currentFolderId && (
+                                    <FileItem
+                                        item={{ name: 'Thư mục mới', type: 'folder' }}
+                                        viewMode={viewMode}
+                                        isEditing={true}
+                                        onConfirmEdit={handleConfirmCreate}
+                                        onCancelEdit={() => setCreatingInFolder(undefined)}
+                                    />
+                                )}
+
+                                {/* Sau đó là danh sách các items hiện có */}
+                                {sortedItems.map((item) => (
+                                    <FileItem
+                                        key={item._id}
+                                        item={item}
+                                        viewMode={viewMode}
+                                        isSelected={selectedIds.includes(item._id)}
+                                        isSelectionMode={isSelectionMode}
+                                        isEditing={editingId === item._id}
+                                        onConfirmEdit={(n) => handleConfirmEdit(item._id, n)}
+                                        onCancelEdit={() => setEditingId(null)}
+                                        onClick={() => handleItemClick(item)}
+                                        onLongPress={() => setSelectedIds(p => [...p, item._id])}
+                                    />
+                                ))}
+                            </div>
+                        ) : (
+                            /* Chỉ hiện khi cả danh sách rỗng VÀ không có lệnh tạo mới */
+                            <div className="text-center py-20 text-slate-400">Không tìm thấy mục nào</div>
+                        )}
+                    </>
                 )}
             </main>
 
@@ -319,7 +331,7 @@ export default function Management() {
                     <div className="absolute bottom-0 left-0 right-0 bg-white rounded-t-[2.5rem] p-8" onClick={e => e.stopPropagation()}>
                         <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-8" />
                         <div className="grid grid-cols-2 gap-4 max-w-md mx-auto">
-                            <button onClick={() => { setIsCreating(true); setIsAddMenuOpen(false); }} className="flex flex-col items-center gap-3 p-6 bg-amber-50 rounded-[2rem]">
+                            <button onClick={() => { setCreatingInFolder(currentFolderId);; setIsAddMenuOpen(false); }} className="flex flex-col items-center gap-3 p-6 bg-amber-50 rounded-[2rem]">
                                 <FolderPlus size={40} className="text-amber-500" />
                                 <span className="text-[11px] font-black text-amber-600 uppercase">Thư mục</span>
                             </button>
