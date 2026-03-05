@@ -2,7 +2,7 @@ import axios from 'axios';
 
 // Tạo một instance của axios
 const apiInstance = axios.create({
-    baseURL: 'https://vzw0b4xt-5000.asse.devtunnels.ms/api', // Thay thế bằng URL của bạn
+    baseURL: 'https://filemanage-be.onrender.com/api', // Thay thế bằng URL của bạn
     timeout: 30000,
 });
 
