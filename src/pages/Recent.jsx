@@ -56,12 +56,12 @@ export default function Recent() {
         if (selectedIds.length > 0) {
             // Chế độ đang chọn nhiều
             setSelectedIds(prev =>
-                prev.includes(item.id) ? prev.filter(i => i !== item.id) : [...prev, item.id]
+                prev.includes(item._id) ? prev.filter(i => i !== item._id) : [...prev, item._id]
             );
         } else {
             // Chế độ bình thường
-            if (item.type === 'file' && imageFiles.some(img => img.id === item.id)) {
-                const index = imageFiles.findIndex(img => img.id === item.id);
+            if (item.type === 'file' && imageFiles.some(img => img.id === item._id)) {
+                const index = imageFiles.findIndex(img => img.id === item._id);
                 setViewerConfig({ isOpen: true, index });
             } else {
                 console.log("Mở file/folder:", item.name);
