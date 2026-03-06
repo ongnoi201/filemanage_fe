@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
-import { Search, Grid, List, ArrowUpDown, ChevronRight, Plus, FolderPlus, UploadCloud, X, Loader2 } from 'lucide-react';
+import { Search, Grid, List, ArrowUpDown, ChevronRight, Plus, FolderPlus, UploadCloud, X, Loader2, Folder } from 'lucide-react';
 import FileItem from '../components/FileItem';
 import ActionDock from '../components/ActionDock';
 import ConfirmModal from '../components/ConfirmModal';
@@ -9,6 +9,7 @@ import { AnimatePresence } from 'framer-motion';
 import folderService from '../services/folderService';
 import fileService from '../services/fileService';
 import { toast } from 'react-toastify';
+import LockModal from '../components/LockModal';
 
 export default function Management() {
     // --- STATE ---
@@ -21,6 +22,7 @@ export default function Management() {
     const [viewMode, setViewMode] = useState('grid');
     const [sortBy, setSortBy] = useState('name');
     const [loading, setLoading] = useState(false);
+    const [loadingDelete, setLoadingDelete] = useState(false);
     const [path, setPath] = useState([{ _id: null, name: 'Drive' }]);
 
     // State cho Modal
@@ -30,7 +32,29 @@ export default function Management() {
     const [editingId, setEditingId] = useState(null);
     const [viewerData, setViewerData] = useState({ isOpen: false, index: 0 });
 
+    const [isLockModalOpen, setIsLockModalOpen] = useState(false);
+    const [loadingLock, setLoadingLock] = useState(false);
+    const [pendingFolder, setPendingFolder] = useState(null);
+
+    const [pagination, setPagination] = useState({
+        currentPage: 1,
+        totalPages: 1,
+        totalItems: 0,
+        itemsPerPage: 20
+    });
+    const [loadingMore, setLoadingMore] = useState(false);
+
     const isSelectionMode = selectedIds.length > 0;
+
+    // Lấy danh sách các object folder hoàn chỉnh từ selectedIds để truyền vào modal
+    const selectedFolderItems = useMemo(() => {
+        return items.filter(item => item.type === 'folder' && selectedIds.includes(item._id));
+    }, [items, selectedIds]);
+
+    // Kiểm tra xem ActionDock có nên hiện nút Lock hay không (chỉ hiện khi chọn toàn folder)
+    const isOnlyFoldersSelected = useMemo(() => {
+        return selectedIds.length > 0 && selectedFolderItems.length === selectedIds.length;
+    }, [selectedIds, selectedFolderItems]);
 
     // --- DEBOUNCE LOGIC ---
     useEffect(() => {
@@ -52,49 +76,116 @@ export default function Management() {
 
     // --- FETCH DATA ---
     const loadData = useCallback(async () => {
-        setLoading(true);
+        // 1. Quản lý trạng thái Loading
+        if (pagination.currentPage === 1) {
+            setLoading(true);
+        } else {
+            setLoadingMore(true);
+        }
+
         try {
-            let data = [];
             if (debouncedSearch.trim()) {
-                // 1. Gọi API Search
+                // --- LOGIC TÌM KIẾM ---
                 const response = await folderService.searchAll(debouncedSearch);
 
-                // 2. Format dữ liệu từ { folders: [], files: [] } thành mảng phẳng
+                // Chuẩn hóa dữ liệu từ search
                 const searchFolders = (response?.folders || []).map(f => ({
                     ...f,
-                    type: 'folder' // Đảm bảo luôn có type
+                    type: 'folder'
                 }));
                 const searchFiles = (response?.files || []).map(f => ({
                     ...f,
                     type: 'file'
                 }));
 
-                data = [...searchFolders, ...searchFiles];
+                const combinedSearchData = [...searchFolders, ...searchFiles];
+
+                // Nếu search, thường ta sẽ hiển thị tất cả kết quả 1 lần hoặc theo phân trang search riêng
+                // Ở đây ta set thẳng vào items
+                setItems(combinedSearchData);
+
+                // Reset pagination về trạng thái ảo để không hiện nút "Xem thêm" khi đang search
+                // (Trừ khi bạn có API search phân trang riêng)
+                setPagination({
+                    currentPage: 1,
+                    totalPages: 1,
+                    totalItems: combinedSearchData.length,
+                    itemsPerPage: 20
+                });
+
             } else {
-                // 3. Gọi API theo Folder thông thường (khi không search)
-                const [folders, files] = await Promise.all([
-                    folderService.getFolders(currentFolderId),
-                    fileService.getFiles(currentFolderId)
+                // --- LOGIC LẤY DỮ LIỆU THƯ MỤC THÔNG THƯỜNG ---
+                const [folders, fileResponse] = await Promise.all([
+                    pagination.currentPage === 1
+                        ? folderService.getFolders(currentFolderId)
+                        : Promise.resolve([]),
+                    fileService.getFiles(currentFolderId, pagination.currentPage, pagination.itemsPerPage)
                 ]);
 
-                data = [
+                const files = fileResponse?.files || [];
+
+                if (fileResponse?.pagination) {
+                    setPagination(fileResponse.pagination);
+                }
+
+                const newItems = [
                     ...(folders || []).map(f => ({ ...f, type: 'folder' })),
-                    ...(files || []).map(f => ({ ...f, type: 'file' }))
+                    ...files.map(f => ({ ...f, type: 'file' }))
                 ];
+
+                setItems(prev => {
+                    if (pagination.currentPage === 1) return newItems;
+
+                    // Gộp và lọc trùng (Tránh lỗi duplicate key React)
+                    const combined = [...prev, ...newItems];
+                    const uniqueMap = new Map();
+                    combined.forEach(item => uniqueMap.set(item._id, item));
+                    return Array.from(uniqueMap.values());
+                });
             }
-            setItems(data);
         } catch (error) {
             console.error("Lỗi tải dữ liệu:", error);
             toast.error("Không thể kết nối máy chủ");
-            setItems([]); // Reset tránh lỗi giao diện
         } finally {
             setLoading(false);
+            setLoadingMore(false);
         }
-    }, [currentFolderId, debouncedSearch]);
+    }, [currentFolderId, debouncedSearch, pagination.currentPage, pagination.itemsPerPage]);
 
     useEffect(() => { loadData(); }, [loadData]);
 
     // --- ACTIONS ---
+
+    const handleLockConfirm = async ({ folderIds, imageHash, mode }) => {
+        setLoadingLock(true);
+        const toastId = toast.loading(mode === 'lock' ? "Đang thiết lập khóa..." : "Đang xác thực...");
+        try {
+            if (mode === 'lock') {
+                await folderService.lockFolders(folderIds, imageHash);
+                toast.update(toastId, { render: "Đã khóa thư mục", type: "success", isLoading: false, autoClose: 2000 });
+            } else {
+                // mode === 'unlock'
+                await folderService.unlockFolder(folderIds[0], imageHash);
+                toast.update(toastId, { render: "Mở khóa thành công", type: "success", isLoading: false, autoClose: 2000 });
+
+                // TỰ ĐỘNG VÀO FOLDER NẾU ĐANG TRONG LUỒNG TRUY CẬP
+                if (pendingFolder && pendingFolder._id === folderIds[0]) {
+                    navigateToFolder(pendingFolder);
+                    setPendingFolder(null); // Reset sau khi xong
+                }
+            }
+
+            await loadData();
+            setIsLockModalOpen(false);
+            setSelectedIds([]);
+        } catch (error) {
+            const msg = error.response?.data?.message || "Ảnh chìa khóa không đúng!";
+            toast.update(toastId, { render: msg, type: "error", isLoading: false, autoClose: 2000 });
+        } finally {
+            setLoadingLock(false);
+        }
+    };
+
     const handleConfirmCreate = async (name) => {
         if (!name.trim()) return setCreatingInFolder(undefined);
         try {
@@ -137,13 +228,17 @@ export default function Management() {
     };
 
     const handleConfirmDelete = async () => {
+        setLoadingDelete(true);
         try {
             await fileService.deleteItems(selectedIds);
             setItems(prev => prev.filter(i => !selectedIds.includes(i._id)));
             toast.success("Đã xóa");
             setSelectedIds([]);
         } catch (error) { toast.error("Lỗi xóa mục"); }
-        finally { setIsDeleteModalOpen(false); }
+        finally {
+            setIsDeleteModalOpen(false);
+            setLoadingDelete(false);
+        }
     };
 
     const handleConfirmMove = async (targetId) => {
@@ -166,26 +261,49 @@ export default function Management() {
         if (selectedIds.length > 0) {
             setSelectedIds(prev => prev.includes(item._id) ? prev.filter(i => i !== item._id) : [...prev, item._id]);
         } else if (item.type === 'folder') {
-            // Nếu đang search mà click vào folder, thoát chế độ search để vào folder đó
-            if (debouncedSearch) {
-                setSearchQuery(''); // Xóa text trong input
-                setDebouncedSearch(''); // Xóa debounce
+            // --- LOGIC MỚI: KIỂM TRA KHÓA ---
+            if (item.protection?.status === 'locked') {
+                setPendingFolder(item); // Lưu folder này lại
+                setIsLockModalOpen(true); // Mở modal để yêu cầu nhập ảnh khóa
+                return; // Dừng lại không cho vào folder
             }
+            // -------------------------------
 
-            setCurrentFolderId(item._id);
-            setCreatingInFolder(undefined);
-            setIsAddMenuOpen(false);
-            setPath(prev => [...prev, { _id: item._id, name: item.name }]);
-            setSelectedIds([]);
+            // Nếu không khóa hoặc đã mở, thực hiện điều hướng bình thường
+            navigateToFolder(item);
         } else {
-            // Xử lý xem ảnh
+            // Xử lý xem ảnh (giữ nguyên)
             const ext = item.name?.split('.').pop()?.toLowerCase();
             if (imageExtensions.includes(ext)) {
                 const idx = imageItems.findIndex(img => img._id === item._id);
                 setViewerData({ isOpen: true, index: idx });
             }
         }
-    }, [selectedIds, imageItems, debouncedSearch]); // Thêm debouncedSearch vào dependency
+    }, [selectedIds, imageItems, debouncedSearch]);
+
+    // Tách hàm điều hướng ra để tái sử dụng
+    const navigateToFolder = (folder) => {
+        if (debouncedSearch) {
+            setSearchQuery('');
+            setDebouncedSearch('');
+        }
+
+        // RESET QUAN TRỌNG Ở ĐÂY
+        setItems([]); // Xóa sạch danh sách cũ ngay lập tức
+        setCurrentFolderId(folder._id);
+        setPagination({
+            currentPage: 1,
+            totalPages: 1,
+            totalItems: 0,
+            itemsPerPage: 20
+        });
+        // ----------------------
+
+        setPath(prev => [...prev, { _id: folder._id, name: folder.name }]);
+        setSelectedIds([]);
+        setCreatingInFolder(undefined);
+        setIsAddMenuOpen(false);
+    };
 
     const sortedItems = useMemo(() => {
         return [...items].sort((a, b) => {
@@ -229,6 +347,8 @@ export default function Management() {
                                                 setPath(path.slice(0, index + 1));
                                                 setCurrentFolderId(crumb._id);
                                                 setSelectedIds([]);
+                                                setPagination(prev => ({ ...prev, currentPage: 1 }));
+                                                setItems([]);
                                             }}
                                             className={`text-sm px-2 py-1 rounded-lg whitespace-nowrap ${index === path.length - 1 ? 'font-bold text-blue-600 bg-blue-50' : 'text-slate-400'}`}
                                         >
@@ -249,7 +369,6 @@ export default function Management() {
             </header>
 
             {/* Main Content */}
-            {/* Main Content */}
             <main className="max-w-5xl mx-auto px-4 mt-36">
                 {loading ? (
                     <div className="flex flex-col items-center justify-center py-32 text-slate-300">
@@ -260,37 +379,79 @@ export default function Management() {
                     <>
                         {/* Hiển thị danh sách nếu có items HOẶC đang trong chế độ tạo mới */}
                         {(sortedItems.length > 0 || creatingInFolder === currentFolderId) ? (
-                            <div className={viewMode === 'grid' ? 'grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-4' : 'flex flex-col gap-2'}>
-                                {/* Luôn ưu tiên hiển thị ô tạo mới ở đầu danh sách */}
-                                {creatingInFolder === currentFolderId && (
-                                    <FileItem
-                                        item={{ name: 'Thư mục mới', type: 'folder' }}
-                                        viewMode={viewMode}
-                                        isEditing={true}
-                                        onConfirmEdit={handleConfirmCreate}
-                                        onCancelEdit={() => setCreatingInFolder(undefined)}
-                                    />
-                                )}
+                            <div className="flex flex-col w-full"> {/* Container bọc ngoài để quản lý dòng chảy dọc */}
 
-                                {/* Sau đó là danh sách các items hiện có */}
-                                {sortedItems.map((item) => (
-                                    <FileItem
-                                        key={item._id}
-                                        item={item}
-                                        viewMode={viewMode}
-                                        isSelected={selectedIds.includes(item._id)}
-                                        isSelectionMode={isSelectionMode}
-                                        isEditing={editingId === item._id}
-                                        onConfirmEdit={(n) => handleConfirmEdit(item._id, n)}
-                                        onCancelEdit={() => setEditingId(null)}
-                                        onClick={() => handleItemClick(item)}
-                                        onLongPress={() => setSelectedIds(p => [...p, item._id])}
-                                    />
-                                ))}
+                                {/* 1. Phần Grid/List Items */}
+                                <div className={viewMode === 'grid'
+                                    ? 'grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-4'
+                                    : 'flex flex-col gap-2'}>
+
+                                    {/* Luôn ưu tiên hiển thị ô tạo mới ở đầu danh sách */}
+                                    {creatingInFolder === currentFolderId && (
+                                        <FileItem
+                                            item={{ name: 'Thư mục mới', type: 'folder' }}
+                                            viewMode={viewMode}
+                                            isEditing={true}
+                                            onConfirmEdit={handleConfirmCreate}
+                                            onCancelEdit={() => setCreatingInFolder(undefined)}
+                                        />
+                                    )}
+
+                                    {/* Danh sách các items hiện có */}
+                                    {sortedItems.map((item) => (
+                                        <FileItem
+                                            key={item._id}
+                                            item={item}
+                                            isLocked={item.protection?.status === 'locked'}
+                                            viewMode={viewMode}
+                                            isSelected={selectedIds.includes(item._id)}
+                                            isSelectionMode={isSelectionMode}
+                                            isEditing={editingId === item._id}
+                                            onConfirmEdit={(n) => handleConfirmEdit(item._id, n)}
+                                            onCancelEdit={() => setEditingId(null)}
+                                            onClick={() => handleItemClick(item)}
+                                            onLongPress={() => setSelectedIds(p => [...p, item._id])}
+                                        />
+                                    ))}
+                                </div>
+
+                                {/* 2. Phần Nút "Xem thêm" - Đưa ra ngoài Grid để căn giữa tuyệt đối */}
+                                {/* 2. Phần Nút "Xem thêm" */}
+                                {!loading && !debouncedSearch && pagination.currentPage < pagination.totalPages && (
+                                    <div className="flex justify-center w-full mt-12 pb-10">
+                                        <button
+                                            disabled={loadingMore} // Vô hiệu hóa khi đang load
+                                            onClick={() => setPagination(p => ({ ...p, currentPage: p.currentPage + 1 }))}
+                                            className="group flex items-center gap-3 px-10 py-3.5 bg-white hover:bg-blue-600 text-slate-600 hover:text-white border border-slate-200 hover:border-blue-600 rounded-2xl text-sm font-bold transition-all duration-300 shadow-sm hover:shadow-blue-200 disabled:opacity-70 disabled:cursor-not-allowed"
+                                        >
+                                            {loadingMore ? (
+                                                <>
+                                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                                    <span>Đang tải...</span>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <span>Xem thêm</span>
+                                                    <svg
+                                                        className="w-4 h-4 transition-transform group-hover:translate-y-0.5"
+                                                        fill="none" viewBox="0 0 24 24" stroke="currentColor"
+                                                    >
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                                    </svg>
+                                                </>
+                                            )}
+                                        </button>
+                                    </div>
+                                )}
                             </div>
                         ) : (
                             /* Chỉ hiện khi cả danh sách rỗng VÀ không có lệnh tạo mới */
-                            <div className="text-center py-20 text-slate-400">Không tìm thấy mục nào</div>
+                            <div className="flex flex-col items-center justify-center py-32 text-slate-400">
+                                <div className="bg-slate-50 p-6 rounded-full mb-4">
+                                    <Folder className="w-12 h-12 text-slate-200" />
+                                </div>
+                                <p className="font-medium">Không tìm thấy mục nào</p>
+                            </div>
                         )}
                     </>
                 )}
@@ -305,6 +466,9 @@ export default function Management() {
                 onMove={() => setIsMoveModalOpen(true)}
                 onDelete={() => setIsDeleteModalOpen(true)}
                 onCancel={() => setSelectedIds([])}
+                showLock={isOnlyFoldersSelected}
+                isLocked={selectedFolderItems.every(f => f.protection?.status === 'locked')}
+                onLockToggle={() => setIsLockModalOpen(true)}
             />
 
             {!isSelectionMode && !debouncedSearch && (
@@ -322,6 +486,20 @@ export default function Management() {
                         onClose={() => setViewerData({ ...viewerData, isOpen: false })}
                         onDelete={(id) => { setViewerData({ ...viewerData, isOpen: false }); setSelectedIds([id]); setIsDeleteModalOpen(true); }}
                         onRename={(id) => { setViewerData({ ...viewerData, isOpen: false }); setEditingId(id); }}
+                    />
+                )}
+
+                {isLockModalOpen && (
+                    <LockModal
+                        isOpen={isLockModalOpen}
+                        isLoading={loadingLock}
+                        // Nếu có pendingFolder (do click), ưu tiên folder đó. Nếu không lấy từ selection (do dùng ActionDock)
+                        selectedItems={pendingFolder ? [pendingFolder] : selectedFolderItems}
+                        onClose={() => {
+                            setIsLockModalOpen(false);
+                            setPendingFolder(null); // Reset nếu người dùng đóng modal
+                        }}
+                        onConfirm={handleLockConfirm}
                     />
                 )}
             </AnimatePresence>
@@ -344,7 +522,7 @@ export default function Management() {
                 </div>
             )}
 
-            <ConfirmModal isOpen={isDeleteModalOpen} title="Xóa mục đã chọn?" message="Dữ liệu sẽ mất vĩnh viễn." onConfirm={handleConfirmDelete} onCancel={() => setIsDeleteModalOpen(false)} />
+            <ConfirmModal isLoading={loadingDelete} isOpen={isDeleteModalOpen} title="Xóa mục đã chọn?" message="Dữ liệu sẽ mất vĩnh viễn." onConfirm={handleConfirmDelete} onCancel={() => setIsDeleteModalOpen(false)} />
             <FolderPickerModal isOpen={isMoveModalOpen} movingIds={selectedIds} onClose={() => setIsMoveModalOpen(false)} onConfirm={handleConfirmMove} />
         </div>
     );

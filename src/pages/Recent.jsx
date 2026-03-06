@@ -10,12 +10,14 @@ import ConfirmModal from '../components/ConfirmModal';
 
 // Services
 import fileService from '../services/fileService';
+import { toast } from 'react-toastify';
 
 export default function Recent() {
     // --- STATES ---
     const [viewMode, setViewMode] = useState('grid');
     const [files, setFiles] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [loadingDelete, setLoadingDelete] = useState(true);
     const [selectedIds, setSelectedIds] = useState([]);
 
     // States cho Modals/Viewer
@@ -86,6 +88,7 @@ export default function Recent() {
     };
 
     const executeDelete = async () => {
+        setLoadingDelete(true);
         try {
             await fileService.deleteItems(confirmDelete.ids);
             // Cập nhật UI: Lọc bỏ các phần tử có _id nằm trong danh sách xóa
@@ -93,9 +96,10 @@ export default function Recent() {
             setSelectedIds([]);
             setViewerConfig({ isOpen: false, index: 0 });
         } catch (error) {
-            alert("Không thể xóa các mục đã chọn.");
+            toast.error("Không thể xóa các mục đã chọn.");
         } finally {
             setConfirmDelete({ isOpen: false, ids: [] });
+            setLoadingDelete(false);
         }
     };
 
@@ -189,6 +193,7 @@ export default function Recent() {
 
             {/* CONFIRM MODAL */}
             <ConfirmModal
+                isLoading={loadingDelete}
                 isOpen={confirmDelete.isOpen}
                 title="Xóa mục đã chọn?"
                 message={`Bạn có chắc chắn muốn xóa ${confirmDelete.ids.length} mục này? Dữ liệu sẽ được chuyển vào thùng rác.`}

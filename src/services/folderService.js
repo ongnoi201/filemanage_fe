@@ -25,6 +25,20 @@ const folderService = {
     },
     searchAll: (q) => {
         return apiService.get('/folders/search', { q });
+    },
+
+    lockFolders: (folderIds, imageHash = null) => {
+        return apiService.post('/folders/lock-multiple', { 
+            folderIds, 
+            imageHash 
+        });
+    },
+
+    unlockFolder: (folderId, imageHash) => {
+        return apiService.post('/folders/unlock', { 
+            folderId, 
+            imageHash 
+        });
     }
 };
 

@@ -1,7 +1,8 @@
 import React from 'react';
-import { Pencil, Move, Trash2, X } from 'lucide-react';
+import { Pencil, Move, Trash2, X, Lock, Unlock } from 'lucide-react';
 
-const ActionDock = ({ selectedCount, onEdit, onMove, onDelete, onCancel }) => {
+// Giả sử bạn truyền thêm prop 'isLocked' để biết trạng thái hiện tại của (các) item
+const ActionDock = ({ selectedCount, isLocked, onEdit, onMove, onDelete, onLockToggle, onCancel }) => {
     if (selectedCount === 0) return null;
 
     return (
@@ -17,6 +18,24 @@ const ActionDock = ({ selectedCount, onEdit, onMove, onDelete, onCancel }) => {
                     <span className="text-[9px] font-bold">SỬA</span>
                 </button>
             )}
+
+            {/* NÚT KHÓA/MỞ KHÓA: Hiện cho cả 1 hoặc nhiều item */}
+            <button
+                onClick={onLockToggle}
+                className="flex flex-col items-center gap-1 group active:scale-90 transition-transform"
+            >
+                {isLocked ? (
+                    <>
+                        <Unlock className="w-5 h-5 text-green-400" />
+                        <span className="text-[9px] font-bold">MỞ KHÓA</span>
+                    </>
+                ) : (
+                    <>
+                        <Lock className="w-5 h-5 text-slate-400" />
+                        <span className="text-[9px] font-bold">KHÓA</span>
+                    </>
+                )}
+            </button>
 
             {/* Nút Di chuyển */}
             <button

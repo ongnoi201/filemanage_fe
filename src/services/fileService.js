@@ -10,8 +10,12 @@ const fileService = {
         });
     },
 
-    getFiles: (folderId = null) => {
-        return apiService.get('/files', { folderId });
+    getFiles: (folderId = null, page = 1, limit = 20) => {
+        return apiService.get('/files', {
+            folderId,
+            page,
+            limit
+        });
     },
 
     renameFile: (id, newName) => {

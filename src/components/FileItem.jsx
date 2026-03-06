@@ -1,5 +1,5 @@
 import React, { memo, useRef, useState, useEffect } from 'react';
-import { Folder, FileText, CheckCircle2 } from 'lucide-react';
+import { Folder, FileText, CheckCircle2, Lock } from 'lucide-react';
 
 const FileItem = ({ 
     item, 
@@ -7,6 +7,7 @@ const FileItem = ({
     isSelected, 
     isSelectionMode, 
     isEditing,
+    isLocked, 
     onConfirmEdit,
     onCancelEdit,
     onClick, 
@@ -17,13 +18,12 @@ const FileItem = ({
     const [tempName, setTempName] = useState(item.name);
     
     const isFolder = item.type === 'folder';
-    const isImage = item.url && item.name.match(/\.(jpg|jpeg|png|webp)$/i);
+    const isImage = item.url && item.name.match(/\.(jpg|jpeg|png|webp|avif)$/i);
 
-    // Xử lý Focus và Chọn văn bản khi vào chế độ edit
+    // Tự động focus và bôi đen tên file khi vào chế độ đổi tên
     useEffect(() => {
         if (isEditing && inputRef.current) {
             inputRef.current.focus();
-            // Bôi đen phần tên, bỏ qua phần mở rộng nếu là file
             const lastDotIndex = item.name.lastIndexOf('.');
             if (!isFolder && lastDotIndex > 0) {
                 inputRef.current.setSelectionRange(0, lastDotIndex);
@@ -43,12 +43,21 @@ const FileItem = ({
 
     const handleStart = () => {
         if (isSelectionMode || isEditing) return;
-        timerRef.current = setTimeout(() => onLongPress(item), 900);
+        timerRef.current = setTimeout(() => onLongPress(item), 800);
     };
 
     const handleEnd = () => {
         if (timerRef.current) clearTimeout(timerRef.current);
     };
+
+    // Style cho Grid và List
+    const containerStyle = viewMode === 'grid' 
+        ? 'flex flex-col p-2.5 w-full h-[220px]' 
+        : 'flex items-center p-3 h-[76px] w-full';
+
+    const mediaBoxStyle = viewMode === 'grid' 
+        ? 'w-full h-36 mb-3' 
+        : 'w-14 h-14 mr-4';
 
     return (
         <div
@@ -58,37 +67,58 @@ const FileItem = ({
             onTouchStart={handleStart}
             onTouchEnd={handleEnd}
             onClick={() => !isEditing && onClick(item)}
-            className={`relative group transition-all duration-200 cursor-pointer select-none
-                ${viewMode === 'grid' ? 'flex flex-col p-2' : 'flex items-center p-3'}
+            className={`relative group transition-all duration-300 cursor-pointer select-none overflow-hidden rounded-2xl border
+                ${containerStyle}
                 ${isSelected 
-                    ? 'bg-blue-50 ring-2 ring-blue-500 rounded-2xl scale-[0.98]' 
-                    : 'bg-white rounded-2xl border border-transparent shadow-sm hover:shadow-md'
-                } ${isEditing ? 'ring-2 ring-blue-400 shadow-lg z-10' : ''}`}
+                    ? 'bg-blue-50 border-blue-400 ring-2 ring-blue-500/20 scale-[0.97]' 
+                    : 'bg-white border-slate-100 shadow-sm hover:shadow-md hover:border-blue-200'
+                } 
+                ${isEditing ? 'ring-2 ring-blue-400 shadow-xl z-20' : ''}`}
         >
+            {/* 1. Selection Overlay & Checkbox */}
             {isSelectionMode && !isEditing && (
-                <div className="absolute top-2 left-2 z-10 animate-in zoom-in-50">
+                <div className="absolute top-2 left-2 z-30 animate-in zoom-in-50">
                     {isSelected ? (
-                        <CheckCircle2 className="w-6 h-6 text-blue-600 fill-white" />
+                        <div className="bg-blue-600 rounded-full p-0.5 shadow-lg">
+                            <CheckCircle2 className="w-5 h-5 text-white" />
+                        </div>
                     ) : (
-                        <div className="w-6 h-6 rounded-full border-2 border-slate-300 bg-white/50" />
+                        <div className="w-6 h-6 rounded-full border-2 border-slate-300 bg-white/60 backdrop-blur-sm" />
                     )}
                 </div>
             )}
 
-            <div className={`flex items-center justify-center rounded-xl overflow-hidden
-                ${viewMode === 'grid' ? 'w-full aspect-square mb-2' : 'w-12 h-12 mr-4 flex-shrink-0'} 
-                ${isFolder ? 'bg-amber-50 text-amber-500' : 'bg-blue-50 text-blue-600'}`}
+            {/* 2. Media Container (Ảnh/Icon) */}
+            <div className={`relative flex-shrink-0 flex items-center justify-center rounded-xl overflow-hidden transition-colors
+                ${mediaBoxStyle}
+                ${isFolder ? 'bg-amber-50 text-amber-500' : 'bg-slate-50 text-slate-400'}
+                ${isLocked ? 'opacity-80 grayscale-[0.3]' : ''}`}
             >
                 {isFolder ? (
-                    <Folder fill="currentColor" className="w-10 h-10 opacity-80" />
+                    <Folder fill="currentColor" className={`${viewMode === 'grid' ? 'w-16 h-16' : 'w-8 h-8'} opacity-90`} />
                 ) : isImage ? (
-                    <img src={item.url} alt="" className="w-full h-full object-cover" />
+                    <img 
+                        src={item.url} 
+                        alt={item.name}
+                        className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" 
+                    />
                 ) : (
-                    <FileText className="w-8 h-8 opacity-80" />
+                    <FileText className={`${viewMode === 'grid' ? 'w-12 h-12' : 'w-7 h-7'} opacity-70`} />
                 )}
+
+                {/* Lock Badge - Nhỏ gọn ở góc ảnh */}
+                {isLocked && (
+                    <div className="absolute bottom-1.5 right-1.5 bg-slate-900/80 backdrop-blur-md p-1 rounded-lg border border-white/20">
+                        <Lock className="w-3 h-3 text-white" fill="currentColor" />
+                    </div>
+                )}
+                
+                {/* Lớp phủ nhẹ khi hover ảnh */}
+                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/5 transition-colors pointer-events-none" />
             </div>
 
-            <div className="min-w-0 flex-1 text-left">
+            {/* 3. Info Section (Tên & Loại) */}
+            <div className="min-w-0 flex-1 flex flex-col justify-center">
                 {isEditing ? (
                     <input
                         ref={inputRef}
@@ -96,18 +126,27 @@ const FileItem = ({
                         onChange={(e) => setTempName(e.target.value)}
                         onBlur={() => onConfirmEdit(tempName)}
                         onKeyDown={handleKeyDown}
-                        className={`w-full text-[13px] font-bold bg-blue-100 rounded px-1 outline-none ring-0 border-none ${viewMode === 'grid' ? 'text-center' : ''}`}
+                        className={`w-full text-sm font-semibold bg-blue-100 text-blue-800 rounded-md px-2 py-1 outline-none ring-2 ring-blue-500
+                            ${viewMode === 'grid' ? 'text-center' : ''}`}
                     />
                 ) : (
-                    <p className={`text-[13px] font-bold truncate text-slate-700 ${viewMode === 'grid' ? 'text-center' : ''}`}>
+                    <p className={`text-[13.5px] font-bold truncate text-slate-700 leading-tight
+                        ${viewMode === 'grid' ? 'text-center px-1' : 'pr-4'}`}
+                    >
                         {item.name}
                     </p>
                 )}
                 
-                <div className={`flex items-center gap-2 mt-0.5 ${viewMode === 'grid' ? 'justify-center' : ''}`}>
+                <div className={`flex items-center gap-1.5 mt-1.5 ${viewMode === 'grid' ? 'justify-center' : ''}`}>
                     <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
-                        {isFolder ? 'Thư mục' : 'Tệp tin'}
+                        {isFolder ? 'Thư mục' : 'Tài liệu'}
                     </span>
+                    {isLocked && (
+                        <>
+                            <span className="w-1 h-1 rounded-full bg-slate-300" />
+                            <span className="text-[9px] text-rose-500 font-bold uppercase">Bảo mật</span>
+                        </>
+                    )}
                 </div>
             </div>
         </div>

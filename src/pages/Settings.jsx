@@ -211,6 +211,7 @@ export default function Settings() {
         <div className="h-screen flex flex-col bg-white font-sans overflow-hidden select-none">
             {/* Modal Xác nhận dùng chung */}
             <ConfirmModal
+                isLoading = {loading}
                 isOpen={confirmModal.isOpen}
                 title={confirmModal.title}
                 message={confirmModal.message}
