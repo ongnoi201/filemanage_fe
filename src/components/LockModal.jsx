@@ -2,28 +2,57 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Lock, Unlock, Image as ImageIcon, ShieldCheck, RefreshCw, AlertCircle } from 'lucide-react';
 
+// --- HÀM NÉN ẢNH ---
+const compressImage = (file, maxWidth = 200, quality = 0.6) => {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = (event) => {
+            const img = new Image();
+            img.src = event.target.result;
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                let width = img.width;
+                let height = img.height;
+
+                if (width > maxWidth) {
+                    height = (maxWidth / width) * height;
+                    width = maxWidth;
+                }
+
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, width, height);
+
+                // Chuyển về JPEG để có dung lượng thấp nhất
+                const compressedBase64 = canvas.toDataURL('image/jpeg', quality);
+                resolve(compressedBase64);
+            };
+        };
+        reader.onerror = (error) => reject(error);
+    });
+};
+
 const LockModal = ({ isOpen, onClose, selectedItems, onConfirm, isLoading }) => {
     const [selectedImage, setSelectedImage] = useState(null);
     const [previewUrl, setPreviewUrl] = useState(null);
+    const [isProcessing, setIsProcessing] = useState(false); // Trạng thái đang nén ảnh
 
     useEffect(() => {
         if (isOpen) {
             setSelectedImage(null);
             setPreviewUrl(null);
+            setIsProcessing(false);
         }
     }, [isOpen]);
 
     const lockConfig = useMemo(() => {
         if (!selectedItems || selectedItems.length === 0) return { mode: 'idle' };
-
-        // THAY ĐỔI TẠI ĐÂY: Dùng every để kiểm tra tính đồng nhất
-        // true: Tất cả đều đã có khóa cũ | false: Có ít nhất 1 mục mới chưa từng khóa
-        const allHaveKey = selectedItems.every(item => item.protection?.hasImageKey);
         
-        // Kiểm tra xem có mục nào đang ở trạng thái 'locked' (đang đóng) không
+        const allHaveKey = selectedItems.every(item => item.protection?.hasImageKey);
         const hasLockedItem = selectedItems.some(item => item.protection?.status === 'locked');
 
-        // 1. Chế độ Mở khóa (Unlock)
         if (selectedItems.length === 1 && selectedItems[0].protection?.status === 'locked') {
             return {
                 mode: 'unlock',
@@ -37,8 +66,6 @@ const LockModal = ({ isOpen, onClose, selectedItems, onConfirm, isLoading }) => 
             };
         }
 
-        // 2. Chế độ Khóa/Cập nhật (Lock)
-        // Chỉ cho phép nếu tất cả mục đang chọn đều đang mở (không có status 'locked')
         if (!hasLockedItem) {
             return {
                 mode: 'lock',
@@ -64,39 +91,42 @@ const LockModal = ({ isOpen, onClose, selectedItems, onConfirm, isLoading }) => 
         };
     }, [selectedItems]);
 
-    const handleImageChange = (e) => {
+    // --- THAY ĐỔI TẠI ĐÂY: Xử lý nén ảnh ngay khi chọn ---
+    const handleImageChange = async (e) => {
         const file = e.target.files[0];
         if (file) {
-            setSelectedImage(file);
-            const reader = new FileReader();
-            reader.onloadend = () => setPreviewUrl(reader.result);
-            reader.readAsDataURL(file);
+            setIsProcessing(true); // Bật loading cho quá trình nén
+            try {
+                // Nén ảnh xuống tối đa 200px, chất lượng 60%
+                const miniBase64 = await compressImage(file, 200, 0.6);
+                setSelectedImage(file);
+                setPreviewUrl(miniBase64); // Lưu Base64 đã nén vào preview/hash
+            } catch (error) {
+                console.error("Lỗi nén ảnh:", error);
+            } finally {
+                setIsProcessing(false);
+            }
         }
     };
 
     const handleSubmit = () => {
-        // Validation logic:
-        // - Unlock: Luôn cần ảnh.
-        // - Lock mới (!check): Luôn cần ảnh.
-        // - Update (check): Cho phép null.
-        if (lockConfig.mode === 'unlock' && !selectedImage) return;
-        if (lockConfig.mode === 'lock' && !lockConfig.check && !selectedImage) return;
+        if (lockConfig.mode === 'unlock' && !previewUrl) return;
+        if (lockConfig.mode === 'lock' && !lockConfig.check && !previewUrl) return;
         if (['error', 'idle'].includes(lockConfig.mode)) return;
 
         onConfirm({
             folderIds: selectedItems.map(f => f._id),
-            imageHash: previewUrl,
+            imageHash: previewUrl, // previewUrl bây giờ là chuỗi đã nén
             mode: lockConfig.mode
         });
     };
 
     if (!isOpen) return null;
 
-    // Tính toán trạng thái nút dựa trên biến allHaveKey (lockConfig.check)
-    const isButtonDisabled = isLoading || (
+    const isButtonDisabled = isLoading || isProcessing || (
         lockConfig.mode === 'error' ||
-        (lockConfig.mode === 'unlock' && !selectedImage) ||
-        (lockConfig.mode === 'lock' && !lockConfig.check && !selectedImage)
+        (lockConfig.mode === 'unlock' && !previewUrl) ||
+        (lockConfig.mode === 'lock' && !lockConfig.check && !previewUrl)
     );
 
     return (
@@ -127,10 +157,17 @@ const LockModal = ({ isOpen, onClose, selectedItems, onConfirm, isLoading }) => 
 
                             {lockConfig.mode !== 'error' ? (
                                 <label className="relative group cursor-pointer block">
-                                    <input type="file" className="hidden" accept="image/*" onChange={handleImageChange} />
+                                    <input type="file" className="hidden" accept="image/*" onChange={handleImageChange} disabled={isProcessing} />
                                     <div className={`relative h-44 rounded-[2rem] border-2 border-dashed transition-all flex flex-col items-center justify-center overflow-hidden
                                         ${previewUrl ? 'border-blue-400 bg-blue-50/30' : 'border-slate-200 bg-slate-50 hover:bg-slate-100'}`}>
-                                        {previewUrl ? (
+                                        
+                                        {/* Hiển thị loading khi đang nén */}
+                                        {isProcessing ? (
+                                            <div className="flex flex-col items-center gap-2">
+                                                <RefreshCw className="animate-spin text-blue-500" size={24} />
+                                                <span className="text-[10px] text-slate-400 font-bold uppercase">Đang tối ưu ảnh...</span>
+                                            </div>
+                                        ) : previewUrl ? (
                                             <div className="relative w-full h-full p-2">
                                                 <img src={previewUrl} alt="Preview" className="w-full h-full object-cover rounded-[1.5rem]" />
                                                 <div className="absolute inset-0 flex items-center justify-center bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity">
